@@ -1,6 +1,5 @@
 package com.example.shakeflashlight
 
-package com.shakeutility.flashlight
 
 import android.app.*
 import android.content.Context

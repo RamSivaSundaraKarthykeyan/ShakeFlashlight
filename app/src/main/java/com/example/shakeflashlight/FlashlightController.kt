@@ -1,7 +1,5 @@
 package com.example.shakeflashlight
 
-package com.shakeutility.flashlight
-
 import android.content.Context
 import android.hardware.camera2.CameraAccessException
 import android.hardware.camera2.CameraManager

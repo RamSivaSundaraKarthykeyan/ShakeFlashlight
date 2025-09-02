@@ -1,3 +1,19 @@
 <resources>
-    <string name="app_name">ShakeFlashlight</string>
+    <string name="app_name">Shake Flashlight</string>
+    <string name="enable_shake_detection">Enable Shake Detection</string>
+    <string name="sensitivity">Sensitivity</string>
+    <string name="status_inactive">Status: Inactive</string>
+    <string name="status_active">Shake detection active</string>
+    <string name="flashlight_on">Flashlight ON</string>
+    <string name="flashlight_off">Flashlight OFF</string>
+    <string name="disable_battery_optimization">Disable Battery Optimization</string>
+    <string name="shake_instruction">Shake your phone left-right twice to toggle flashlight</string>
+    <string name="battery_tips">Battery Optimization Tips:\n\n• Keep app running in background\n• Disable battery optimization for this app\n• Use moderate sensitivity settings\n• Enable auto-start after reboot</string>
+    <string name="camera_permission_required">Camera permission required for flashlight</string>
+    <string name="camera_permission_granted">Camera permission granted</string>
+    <string name="flashlight_not_available">Flashlight not available on this device</string>
+    <string name="accelerometer_not_available">Accelerometer not available</string>
+    <string name="failed_toggle_flashlight">Failed to toggle flashlight</string>
+    <string name="notification_title">Shake Flashlight Active</string>
+    <string name="notification_text">Shake device left-right twice to toggle. Flashlight: %s</string>
 </resources>

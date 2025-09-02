@@ -1,6 +1,5 @@
 package com.example.shakeflashlight
 
-package com.shakeutility.flashlight
 
 import android.hardware.Sensor
 import android.hardware.SensorEvent
