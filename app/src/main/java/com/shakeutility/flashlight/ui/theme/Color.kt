@@ -1,4 +1,4 @@
-package com.example.shakeflashlight.ui.theme
+package com.shakeutility.flashlight.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

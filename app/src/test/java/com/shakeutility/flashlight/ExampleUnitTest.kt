@@ -1,4 +1,4 @@
-package com.example.shakeflashlight
+package com.shakeutility.flashlight
 
 import org.junit.Test
 

@@ -16,16 +16,18 @@ import android.widget.SeekBar
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.shakeutility.flashlight.R
 
 class MainActivity : AppCompatActivity(), ShakeDetector.OnShakeListener {
 
     private lateinit var sensorManager: SensorManager
-    private lateinit var accelerometer: Sensor
+    private var accelerometer: Sensor? = null
     private lateinit var shakeDetector: ShakeDetector
     private lateinit var flashlightController: FlashlightController
 
@@ -34,8 +36,8 @@ class MainActivity : AppCompatActivity(), ShakeDetector.OnShakeListener {
     private lateinit var statusText: TextView
     private lateinit var batteryOptimizationButton: Button
 
+    private lateinit var batteryOptimizationLauncher: ActivityResultLauncher<Intent>
     private val CAMERA_PERMISSION_CODE = 100
-    private val BATTERY_OPTIMIZATION_REQUEST_CODE = 101
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -45,6 +47,7 @@ class MainActivity : AppCompatActivity(), ShakeDetector.OnShakeListener {
         setupSensorManager()
         setupFlashlightController()
         checkPermissions()
+        initBatteryOptimizationLauncher()
         setupBatteryOptimization()
     }
 
@@ -64,7 +67,6 @@ class MainActivity : AppCompatActivity(), ShakeDetector.OnShakeListener {
 
         sensitivitySeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                // Adjust shake sensitivity (implementation would modify ShakeDetector threshold)
                 updateStatusText("Sensitivity: $progress%")
             }
             override fun onStartTrackingTouch(seekBar: SeekBar?) {}
@@ -72,7 +74,9 @@ class MainActivity : AppCompatActivity(), ShakeDetector.OnShakeListener {
         })
 
         batteryOptimizationButton.setOnClickListener {
-            requestBatteryOptimizationExemption()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                requestBatteryOptimizationExemption()
+            }
         }
     }
 
@@ -96,6 +100,15 @@ class MainActivity : AppCompatActivity(), ShakeDetector.OnShakeListener {
         }
     }
 
+    private fun initBatteryOptimizationLauncher() {
+        batteryOptimizationLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            // Check if the user granted the permission
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+                batteryOptimizationButton.visibility = if (powerManager.isIgnoringBatteryOptimizations(packageName)) Button.GONE else Button.VISIBLE
+            }
+        }
+    }
     private fun setupBatteryOptimization() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
@@ -109,30 +122,30 @@ class MainActivity : AppCompatActivity(), ShakeDetector.OnShakeListener {
     private fun requestBatteryOptimizationExemption() {
         try {
             val intent = Intent().apply {
+                // Correct usage:
                 action = Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
                 data = Uri.parse("package:$packageName")
             }
-            startActivityForResult(intent, BATTERY_OPTIMIZATION_REQUEST_CODE)
+            batteryOptimizationLauncher.launch(intent)
         } catch (e: Exception) {
-            // Fallback to battery optimization settings
+            e.printStackTrace()
             val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
             startActivity(intent)
         }
     }
 
     private fun startShakeService() {
-        if (accelerometer != null) {
-            sensorManager.registerListener(shakeDetector, accelerometer, SensorManager.SENSOR_DELAY_NORMAL)
+        accelerometer?.let { sensor ->
+            sensorManager.registerListener(shakeDetector, sensor, SensorManager.SENSOR_DELAY_NORMAL)
             updateStatusText("Shake detection active")
 
-            // Start foreground service
             val serviceIntent = Intent(this, ShakeDetectionService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 startForegroundService(serviceIntent)
             } else {
                 startService(serviceIntent)
             }
-        } else {
+        } ?: run {
             Toast.makeText(this, "Accelerometer not available", Toast.LENGTH_SHORT).show()
         }
     }
@@ -141,7 +154,6 @@ class MainActivity : AppCompatActivity(), ShakeDetector.OnShakeListener {
         sensorManager.unregisterListener(shakeDetector)
         updateStatusText("Shake detection inactive")
 
-        // Stop foreground service
         val serviceIntent = Intent(this, ShakeDetectionService::class.java)
         stopService(serviceIntent)
     }
@@ -166,7 +178,9 @@ class MainActivity : AppCompatActivity(), ShakeDetector.OnShakeListener {
     override fun onResume() {
         super.onResume()
         if (serviceToggle.isChecked) {
-            sensorManager.registerListener(shakeDetector, accelerometer, SensorManager.SENSOR_DELAY_NORMAL)
+            accelerometer?.let { sensor ->
+                sensorManager.registerListener(shakeDetector, sensor, SensorManager.SENSOR_DELAY_NORMAL)
+            }
         }
     }
 
@@ -178,7 +192,6 @@ class MainActivity : AppCompatActivity(), ShakeDetector.OnShakeListener {
     @RequiresApi(Build.VERSION_CODES.M)
     override fun onDestroy() {
         super.onDestroy()
-        // Ensure flashlight is turned off when app is destroyed
         flashlightController.turnOffFlashlight()
     }
 
