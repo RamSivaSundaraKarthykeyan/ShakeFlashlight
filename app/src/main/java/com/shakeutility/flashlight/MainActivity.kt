@@ -139,6 +139,9 @@ class MainActivity : AppCompatActivity(), ShakeDetector.OnShakeListener {
             sensorManager.registerListener(shakeDetector, sensor, SensorManager.SENSOR_DELAY_NORMAL)
             updateStatusText("Shake detection active")
 
+            val sharedPrefs = getSharedPreferences("shake_flashlight_prefs", Context.MODE_PRIVATE)
+            sharedPrefs.edit().putBoolean("service_enabled", true).apply()
+
             val serviceIntent = Intent(this, ShakeDetectionService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 startForegroundService(serviceIntent)
@@ -153,6 +156,9 @@ class MainActivity : AppCompatActivity(), ShakeDetector.OnShakeListener {
     private fun stopShakeService() {
         sensorManager.unregisterListener(shakeDetector)
         updateStatusText("Shake detection inactive")
+
+        val sharedPrefs = getSharedPreferences("shake_flashlight_prefs", Context.MODE_PRIVATE)
+        sharedPrefs.edit().putBoolean("service_enabled", false).apply()
 
         val serviceIntent = Intent(this, ShakeDetectionService::class.java)
         stopService(serviceIntent)

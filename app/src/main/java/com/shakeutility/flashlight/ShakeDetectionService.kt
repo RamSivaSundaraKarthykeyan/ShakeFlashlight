@@ -9,6 +9,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
+import android.os.PowerManager
 import android.content.pm.ServiceInfo
 import android.hardware.Sensor
 import android.hardware.SensorManager
@@ -28,10 +29,11 @@ class ShakeDetectionService : Service(), ShakeDetector.OnShakeListener {
     private var accelerometer: Sensor? = null
     private lateinit var shakeDetector: ShakeDetector
     private lateinit var flashlightController: FlashlightController
+    private var wakeLock: PowerManager.WakeLock? = null
 
     companion object {
         const val CHANNEL_ID = "ShakeDetectionChannel"
-        const val NOTIFICATION_ID = 1
+        const val NOTIFICATION_ID = 1001
         const val FOREGROUND_SERVICE_CHANNEL_ID = "shake_flashlight_channel"
 
     }
@@ -41,7 +43,9 @@ class ShakeDetectionService : Service(), ShakeDetector.OnShakeListener {
         setupSensorManager()
         setupFlashlightController()
         createNotificationChannel()
+        acquireWakeLock()
     }
+
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // Prepare your PendingIntent
@@ -68,11 +72,19 @@ class ShakeDetectionService : Service(), ShakeDetector.OnShakeListener {
             .build()
 
         // Start the service in the foreground
-        startForeground(NOTIFICATION_ID, notification)
+        startForeground(NOTIFICATION_ID, createNotification())
+        startShakeDetection()
         return START_STICKY
     }
 
-
+    private fun acquireWakeLock() {
+        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        wakeLock = powerManager.newWakeLock(
+            PowerManager.PARTIAL_WAKE_LOCK,
+            "ShakeFlashlight::WakeLock"
+        )
+        wakeLock?.acquire(10*60*1000L /*10 minutes*/)
+    }
 
     private fun setupSensorManager() {
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
@@ -102,16 +114,24 @@ class ShakeDetectionService : Service(), ShakeDetector.OnShakeListener {
         val updatedNotification = createNotification()
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         notificationManager.notify(NOTIFICATION_ID, updatedNotification)
+        refreshWakeLock()
     }
 
-
+    private fun refreshWakeLock() {
+        wakeLock?.let { wl ->
+            if (wl.isHeld) {
+                wl.release()
+            }
+        }
+        acquireWakeLock()
+    }
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val serviceChannel = NotificationChannel(
                 CHANNEL_ID,
-                "My Foreground Service Channel", // User-visible name
-                NotificationManager.IMPORTANCE_DEFAULT // Or other importance
+                "Shake Detection Service", // User-visible name
+                NotificationManager.IMPORTANCE_LOW // Or other importance
             )
 
             val manager = getSystemService(NotificationManager::class.java)
@@ -134,6 +154,7 @@ class ShakeDetectionService : Service(), ShakeDetector.OnShakeListener {
             .setSmallIcon(android.R.drawable.ic_menu_camera)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .build()
     }
@@ -141,6 +162,11 @@ class ShakeDetectionService : Service(), ShakeDetector.OnShakeListener {
     override fun onDestroy() {
         super.onDestroy()
         sensorManager.unregisterListener(shakeDetector)
+        wakeLock?.let { wl ->
+            if (wl.isHeld) {
+                wl.release()
+            }
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             flashlightController.turnOffFlashlight()
         }
