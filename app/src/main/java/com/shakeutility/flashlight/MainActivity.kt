@@ -163,41 +163,68 @@ class MainActivity : AppCompatActivity(), ShakeDetector.OnShakeListener {
         Toast.makeText(this, "Shake detection cannot be disabled", Toast.LENGTH_SHORT).show()
     }
 
-    @RequiresApi(Build.VERSION_CODES.M)
-    override fun onDoubleShake() {
-        runOnUiThread {
-            val success = flashlightController.toggleFlashlight()
-            val status = if (flashlightController.getFlashlightState()) "ON" else "OFF"
-            updateStatusText("Flashlight $status")
 
-            if (!success) {
-                Toast.makeText(this, "Failed to toggle flashlight", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
 
     private fun updateStatusText(text: String) {
         statusText.text = text
     }
 
+    @RequiresApi(Build.VERSION_CODES.M) // Add if flashlightController operations are used and require M
+    override fun onChopChop() {
+        runOnUiThread {
+            // Implement what should happen on a chop-chop gesture.
+            // For example, you could toggle the flashlight, or perform another action.
+            // Let's assume for now it also toggles the flashlight,
+            // but you might want a different behavior.
+
+            // Log.d("MainActivity", "onChopChop detected!") // For debugging
+
+            val success = flashlightController.toggleFlashlight()
+            val status = if (flashlightController.getFlashlightState()) "ON" else "OFF"
+            updateStatusText("Flashlight $status (Chop-Chop)")
+
+            if (!success) {
+                Toast.makeText(
+                    this,
+                    "Failed to toggle flashlight via chop-chop",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+
+            // Optional: Vibrate for feedback (different pattern than double shake?)
+            // val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+            // if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            //     vibrator.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 50, 50, 50), -1))
+            // } else {
+            //     @Suppress("DEPRECATION")
+            //     vibrator.vibrate(longArrayOf(0, 50, 50, 50), -1)
+            // }
+            Toast.makeText(this, "Chop-chop gesture detected!", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     override fun onResume() {
         super.onResume()
-        if (serviceToggle.isChecked) {
-            accelerometer?.let { sensor ->
-                sensorManager.registerListener(shakeDetector, sensor, SensorManager.SENSOR_DELAY_NORMAL)
-            }
-        }
+     //   if (serviceToggle.isChecked) {
+      //      accelerometer?.let { sensor ->
+     //           sensorManager.registerListener(shakeDetector, sensor, SensorManager.SENSOR_DELAY_NORMAL)
+      //      }
+      //  }
     }
 
     override fun onPause() {
         super.onPause()
-        sensorManager.unregisterListener(shakeDetector)
+       // sensorManager.unregisterListener(shakeDetector)
     }
 
     @RequiresApi(Build.VERSION_CODES.M)
     override fun onDestroy() {
         super.onDestroy()
-        flashlightController.turnOffFlashlight()
+        // ... unregister listeners, release wakelock ...
+        if (::flashlightController.isInitialized) { // Check if initialized
+            flashlightController.turnOffFlashlightCompletely() // Ensure it's off
+            flashlightController.release() // Release resources
+        }
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {

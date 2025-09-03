@@ -4,81 +4,60 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.util.Log
 import kotlin.math.abs
 import kotlin.math.sqrt
 
 class ShakeDetector(private val onShakeListener: OnShakeListener) : SensorEventListener {
-
     interface OnShakeListener {
-        fun onDoubleShake()
+        fun onChopChop()
     }
+
+
+    private var lastChopTime = 0L
+    private var chopCount = 0
+
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
+
 
     companion object {
-        private const val SHAKE_THRESHOLD_GRAVITY = 2.7f
-        private const val SHAKE_SLOP_TIME_MS = 500
-        private const val SHAKE_COUNT_RESET_TIME_MS = 3000
-        private const val REQUIRED_SHAKE_COUNT = 2
+        private const val TILT_THRESHOLD_G = 0.8f      // side-down tilt
+        private const val SHAKE_THRESHOLD_G = 1.5f     // shake magnitude
+        private const val SHAKE_TIMEOUT_MS = 400L      // max time between shakes
     }
 
-    private var mShakeTimestamp: Long = 0
-    private var mShakeCount = 0
-    private var mLastX = 0f
-    private var mLastY = 0f
-    private var mLastZ = 0f
-    private var mLastUpdate: Long = 0
-
-    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
-        // Not needed for this implementation
-    }
+    private var lastShakeTime = 0L
+    private var shakeCount = 0
 
     override fun onSensorChanged(event: SensorEvent) {
-        val currentTime = System.currentTimeMillis()
+        if (event.sensor.type != Sensor.TYPE_ACCELEROMETER) return
 
-        if (currentTime - mLastUpdate > 100) { // Limit updates to 10Hz for battery optimization
-            val diffTime = currentTime - mLastUpdate
-            mLastUpdate = currentTime
+        val gX = event.values[0] / SensorManager.GRAVITY_EARTH
+        val gY = event.values[1] / SensorManager.GRAVITY_EARTH
+        val now = System.currentTimeMillis()
 
-            val x = event.values[0]
-            val y = event.values[1]
-            val z = event.values[2]
+        // Confirm the phone is side-down
+        val sideDown = gX > TILT_THRESHOLD_G || gX < -TILT_THRESHOLD_G
+        if (!sideDown) {
+            shakeCount = 0
+            return
+        }
 
-            val speed = abs(x + y + z - mLastX - mLastY - mLastZ) / diffTime * 10000
-
-            // Convert to G-force
-            val gX = x / SensorManager.GRAVITY_EARTH
-            val gY = y / SensorManager.GRAVITY_EARTH
-            val gZ = z / SensorManager.GRAVITY_EARTH
-
-            val gForce = sqrt(gX * gX + gY * gY + gZ * gZ)
-
-            // Focus on left-right movement (X-axis primarily)
-            val horizontalForce = abs(gX)
-
-            if (gForce > SHAKE_THRESHOLD_GRAVITY && horizontalForce > 1.5f) {
-                val now = System.currentTimeMillis()
-
-                // Ignore shake events too close to each other
-                if (mShakeTimestamp + SHAKE_SLOP_TIME_MS > now) {
-                    return
-                }
-
-                // Reset the shake count after timeout
-                if (mShakeTimestamp + SHAKE_COUNT_RESET_TIME_MS < now) {
-                    mShakeCount = 0
-                }
-
-                mShakeTimestamp = now
-                mShakeCount++
-
-                if (mShakeCount >= REQUIRED_SHAKE_COUNT) {
-                    onShakeListener.onDoubleShake()
-                    mShakeCount = 0 // Reset count after successful detection
-                }
+        // Detect a hammer-like downward chop on the Y-axis
+        if (gY < -SHAKE_THRESHOLD_G) {
+            if (shakeCount == 0 || now - lastShakeTime <= SHAKE_TIMEOUT_MS) {
+                shakeCount++
+                lastShakeTime = now
+            } else {
+                shakeCount = 1
+                lastShakeTime = now
             }
+        }
 
-            mLastX = x
-            mLastY = y
-            mLastZ = z
+        // When we get two chops in quick succession, fire the event
+        if (shakeCount == 2) {
+            onShakeListener.onChopChop()         // now better named onHammer()
+            shakeCount = 0
         }
     }
 }

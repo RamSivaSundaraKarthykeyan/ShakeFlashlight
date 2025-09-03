@@ -1,5 +1,6 @@
 package com.shakeutility.flashlight
 
+import android.Manifest
 import android.app.*
 import android.app.PendingIntent
 import android.app.Service
@@ -8,6 +9,12 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
+import android.hardware.camera2.CameraAccessException
+import android.hardware.camera2.CameraManager
+import android.util.Log
+import android.widget.Toast
+import android.hardware.Camera // Import for older API
+import android.content.pm.PackageManager
 import android.content.Intent
 import android.os.PowerManager
 import android.content.pm.ServiceInfo
@@ -17,6 +24,9 @@ import android.os.Build
 import android.os.IBinder
 import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
+import android.os.Vibrator
+import android.os.VibrationEffect
+import androidx.annotation.RequiresPermission
 // import androidx.privacysandbox.tools.core.generator.build
 import com.shakeutility.flashlight.MainActivity
 
@@ -25,6 +35,7 @@ const val CHANNEL_ID = "MyForegroundServiceChannel"
 
 class ShakeDetectionService : Service(), ShakeDetector.OnShakeListener {
 
+    private lateinit var vibrator: Vibrator
     private lateinit var sensorManager: SensorManager
     private var accelerometer: Sensor? = null
     private lateinit var shakeDetector: ShakeDetector
@@ -40,11 +51,15 @@ class ShakeDetectionService : Service(), ShakeDetector.OnShakeListener {
 
     override fun onCreate() {
         super.onCreate()
-        createNotificationChannel() // Ensure this is called
-        setupSensorManager()
+        vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        // 1) Initialize sensors first
+        sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+        shakeDetector = ShakeDetector(this)
+        // 2) Now everything else
+        createNotificationChannel()
         setupFlashlightController()
         acquireWakeLock()
-        // Note: startShakeDetection() is moved to onStartCommand after startForeground
     }
 
 
@@ -86,6 +101,13 @@ class ShakeDetectionService : Service(), ShakeDetector.OnShakeListener {
             startForeground(NOTIFICATION_ID, notification) // Use the defined NOTIFICATION_ID
         }
 
+        accelerometer?.let { sensor ->
+            sensorManager.registerListener(
+                shakeDetector,
+                sensor,
+                SensorManager.SENSOR_DELAY_NORMAL
+            )
+        } ?: Log.e("ShakeService", "No accelerometer on device")
         // It's good practice to start your actual service work after successfully calling startForeground
         startShakeDetection() // Assuming this method starts the sensor listening
 
@@ -105,33 +127,62 @@ class ShakeDetectionService : Service(), ShakeDetector.OnShakeListener {
     private fun setupSensorManager() {
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+        if (accelerometer == null) {
+            Log.e("ShakeService", "ACCELEROMETER NOT AVAILABLE IN SERVICE!")
+        } else {
+            Log.i("ShakeService", "Accelerometer available in service.")
+        }
         shakeDetector = ShakeDetector(this)
+        Log.i("ShakeService", "ShakeDetector initialized in service.")
     }
 
     private fun setupFlashlightController() {
         flashlightController = FlashlightController(this)
     }
 
+    @RequiresApi(Build.VERSION_CODES.M)
+    @RequiresPermission(Manifest.permission.VIBRATE)
+    override fun onChopChop() {
+        val vibrationMillis: Long = 100 // Duration of vibration
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            // For API 26 (Android Oreo) and above
+            val vibrationEffect = VibrationEffect.createOneShot(vibrationMillis, VibrationEffect.DEFAULT_AMPLITUDE)
+            vibrator.vibrate(vibrationEffect)
+        } else {
+            // For versions below API 26 (deprecated method)
+            @Suppress("DEPRECATION") // Suppress the deprecation warning for the older API
+            vibrator.vibrate(vibrationMillis)
+        }
+        // Toggle flashlight
+        Log.i("ShakeService", "SERVICE onChopChop RECEIVED!")
+        // ... (vibration logic) ...
+        Log.d("ShakeService", "Attempting to toggle flashlight...")
+        val success = flashlightController.toggleFlashlight()
+        Log.d("ShakeService", "Flashlight toggle success: $success. Is On: ${flashlightController.getFlashlightState()}")
+        // ... (notification update logic) ...
+            // Vibrate: short buzz on each toggle
+
+        // Update notification
+        val notification = createNotification()
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        nm.notify(NOTIFICATION_ID, notification)
+        refreshWakeLock()
+    }
+
     private fun startShakeDetection() {
         accelerometer?.let { sensor ->
-            sensorManager.registerListener(
+            val registered = sensorManager.registerListener(
                 shakeDetector,
                 sensor,
                 SensorManager.SENSOR_DELAY_NORMAL
             )
-        }
+            Log.i("ShakeService", "Sensor listener registration attempt. Success: $registered")
+        } ?: Log.e("ShakeService", "Cannot start shake detection, accelerometer is null.")
     }
 
     @RequiresApi(Build.VERSION_CODES.M)
-    override fun onDoubleShake() {
-        flashlightController.toggleFlashlight()
 
-        // Update notification
-        val updatedNotification = createNotification()
-        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.notify(NOTIFICATION_ID, updatedNotification)
-        refreshWakeLock()
-    }
 
     private fun refreshWakeLock() {
         wakeLock?.let { wl ->
@@ -177,14 +228,10 @@ class ShakeDetectionService : Service(), ShakeDetector.OnShakeListener {
 
     override fun onDestroy() {
         super.onDestroy()
-        sensorManager.unregisterListener(shakeDetector)
-        wakeLock?.let { wl ->
-            if (wl.isHeld) {
-                wl.release()
-            }
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            flashlightController.turnOffFlashlight()
+        // ... unregister listeners, release wakelock ...
+        if (::flashlightController.isInitialized) { // Check if initialized
+            flashlightController.turnOffFlashlightCompletely() // Ensure it's off
+            flashlightController.release() // Release resources
         }
     }
 
