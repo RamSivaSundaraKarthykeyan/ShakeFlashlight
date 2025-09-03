@@ -1,5 +1,7 @@
 package com.shakeutility.flashlight
 
+import android.os.Handler
+import android.os.Looper
 import android.Manifest
 import android.app.*
 import android.app.PendingIntent
@@ -35,6 +37,7 @@ const val CHANNEL_ID = "MyForegroundServiceChannel"
 
 class ShakeDetectionService : Service(), ShakeDetector.OnShakeListener {
 
+    private var chopEnabled = true
     private lateinit var vibrator: Vibrator
     private lateinit var sensorManager: SensorManager
     private var accelerometer: Sensor? = null
@@ -140,20 +143,35 @@ class ShakeDetectionService : Service(), ShakeDetector.OnShakeListener {
         flashlightController = FlashlightController(this)
     }
 
-    @RequiresApi(Build.VERSION_CODES.M)
+
+    @RequiresApi(Build.VERSION_CODES.O)
     @RequiresPermission(Manifest.permission.VIBRATE)
     override fun onChopChop() {
-        val vibrationMillis: Long = 100 // Duration of vibration
+        if (!chopEnabled) return      // still cooling down
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            // For API 26 (Android Oreo) and above
-            val vibrationEffect = VibrationEffect.createOneShot(vibrationMillis, VibrationEffect.DEFAULT_AMPLITUDE)
-            vibrator.vibrate(vibrationEffect)
-        } else {
-            // For versions below API 26 (deprecated method)
-            @Suppress("DEPRECATION") // Suppress the deprecation warning for the older API
-            vibrator.vibrate(vibrationMillis)
-        }
+        // Disable until timer expires
+        chopEnabled = false
+
+        fun getVibrationEffect(): VibrationEffect =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                VibrationEffect.createOneShot(100, VibrationEffect.DEFAULT_AMPLITUDE)
+            } else {
+                @Suppress("DEPRECATION")
+                VibrationEffect.createWaveform(longArrayOf(0, 100), -1)
+            }
+
+        // Vibrate + toggle flashlight
+        vibrator.vibrate(getVibrationEffect())
+        flashlightController.toggleFlashlight()
+
+        // Update notification, etc.
+        //updateNotification()
+
+        // Schedule re-enable after 1 second
+        Handler(Looper.getMainLooper()).postDelayed({
+            chopEnabled = true
+        }, 1000)
+
         // Toggle flashlight
         Log.i("ShakeService", "SERVICE onChopChop RECEIVED!")
         // ... (vibration logic) ...
