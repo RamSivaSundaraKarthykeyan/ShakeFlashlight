@@ -10,17 +10,11 @@ class BootReceiver : BroadcastReceiver() {
         if (intent.action == Intent.ACTION_BOOT_COMPLETED ||
             intent.action == Intent.ACTION_MY_PACKAGE_REPLACED) {
 
-            // Check if user had enabled the service before reboot
-            val sharedPrefs = context.getSharedPreferences("shake_flashlight_prefs", Context.MODE_PRIVATE)
-            val wasServiceEnabled = sharedPrefs.getBoolean("service_enabled", false)
-
-            if (wasServiceEnabled) {
-                val serviceIntent = Intent(context, ShakeDetectionService::class.java)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    context.startForegroundService(serviceIntent)
-                } else {
-                    context.startService(serviceIntent)
-                }
+            val serviceIntent = Intent(context, ShakeDetectionService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(serviceIntent)
+            } else {
+                context.startService(serviceIntent)
             }
         }
     }

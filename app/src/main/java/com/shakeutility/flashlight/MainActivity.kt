@@ -49,6 +49,7 @@ class MainActivity : AppCompatActivity(), ShakeDetector.OnShakeListener {
         checkPermissions()
         initBatteryOptimizationLauncher()
         setupBatteryOptimization()
+        startShakeService()
     }
 
     private fun initViews() {
@@ -57,11 +58,16 @@ class MainActivity : AppCompatActivity(), ShakeDetector.OnShakeListener {
         statusText = findViewById(R.id.statusText)
         batteryOptimizationButton = findViewById(R.id.batteryOptimizationButton)
 
+        // Auto-enable shake detection and keep it on
+        serviceToggle.isChecked = true
+
         serviceToggle.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked) {
                 startShakeService()
             } else {
-                stopShakeService()
+                // Force toggle back to ON - don't allow user to turn it off
+                serviceToggle.isChecked = true
+                Toast.makeText(this, "Shake detection is always active for this app", Toast.LENGTH_SHORT).show()
             }
         }
 
@@ -139,8 +145,7 @@ class MainActivity : AppCompatActivity(), ShakeDetector.OnShakeListener {
             sensorManager.registerListener(shakeDetector, sensor, SensorManager.SENSOR_DELAY_NORMAL)
             updateStatusText("Shake detection active")
 
-            val sharedPrefs = getSharedPreferences("shake_flashlight_prefs", Context.MODE_PRIVATE)
-            sharedPrefs.edit().putBoolean("service_enabled", true).apply()
+
 
             val serviceIntent = Intent(this, ShakeDetectionService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -154,14 +159,8 @@ class MainActivity : AppCompatActivity(), ShakeDetector.OnShakeListener {
     }
 
     private fun stopShakeService() {
-        sensorManager.unregisterListener(shakeDetector)
-        updateStatusText("Shake detection inactive")
-
-        val sharedPrefs = getSharedPreferences("shake_flashlight_prefs", Context.MODE_PRIVATE)
-        sharedPrefs.edit().putBoolean("service_enabled", false).apply()
-
-        val serviceIntent = Intent(this, ShakeDetectionService::class.java)
-        stopService(serviceIntent)
+        // Don't actually stop - just show message
+        Toast.makeText(this, "Shake detection cannot be disabled", Toast.LENGTH_SHORT).show()
     }
 
     @RequiresApi(Build.VERSION_CODES.M)

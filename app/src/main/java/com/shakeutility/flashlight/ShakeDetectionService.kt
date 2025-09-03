@@ -31,19 +31,20 @@ class ShakeDetectionService : Service(), ShakeDetector.OnShakeListener {
     private lateinit var flashlightController: FlashlightController
     private var wakeLock: PowerManager.WakeLock? = null
 
+    // Ensure these constants are defined within your class, typically in a companion object:
     companion object {
-        const val CHANNEL_ID = "ShakeDetectionChannel"
-        const val NOTIFICATION_ID = 1001
-        const val FOREGROUND_SERVICE_CHANNEL_ID = "shake_flashlight_channel"
-
+        const val CHANNEL_ID = "ShakeDetectionChannel" // Or your preferred channel ID
+        const val NOTIFICATION_ID = 1001 // Or your preferred notification ID
+        // const val FOREGROUND_SERVICE_CHANNEL_ID = "shake_flashlight_channel" // This seems duplicative if CHANNEL_ID is already defined
     }
 
     override fun onCreate() {
         super.onCreate()
+        createNotificationChannel() // Ensure this is called
         setupSensorManager()
         setupFlashlightController()
-        createNotificationChannel()
         acquireWakeLock()
+        // Note: startShakeDetection() is moved to onStartCommand after startForeground
     }
 
 
@@ -62,20 +63,35 @@ class ShakeDetectionService : Service(), ShakeDetector.OnShakeListener {
             pendingIntentFlags
         )
 
+
         // Build the notification using your service’s CHANNEL_ID
-        val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
+        val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID) // Use the defined CHANNEL_ID
             .setContentTitle("Flashlight Active")
             .setContentText("Shake to toggle flashlight.")
-            .setSmallIcon(android.R.drawable.ic_menu_camera)
+            .setSmallIcon(android.R.drawable.ic_menu_camera) // Replace with a proper icon from your drawables
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .build()
 
-        // Start the service in the foreground
-        startForeground(NOTIFICATION_ID, createNotification())
-        startShakeDetection()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // For Android 10 (API 29) and above, you must specify the type(s).
+            // For your flashlight service, "camera" is the appropriate type.
+            startForeground(
+                NOTIFICATION_ID, // Use the defined NOTIFICATION_ID
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA // Correct type
+            )
+        } else {
+            // For versions below Android 10 (API 29), you don't provide the type parameter.
+            startForeground(NOTIFICATION_ID, notification) // Use the defined NOTIFICATION_ID
+        }
+
+        // It's good practice to start your actual service work after successfully calling startForeground
+        startShakeDetection() // Assuming this method starts the sensor listening
+
         return START_STICKY
     }
+
 
     private fun acquireWakeLock() {
         val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
