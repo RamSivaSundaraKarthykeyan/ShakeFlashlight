@@ -143,34 +143,34 @@ class ShakeDetectionService : Service(), ShakeDetector.OnShakeListener {
         flashlightController = FlashlightController(this)
     }
 
+    private var lastToggleTime = 0L
+    private val TOGGLE_COOLDOWN_MS = 1000L
 
     @RequiresApi(Build.VERSION_CODES.O)
     @RequiresPermission(Manifest.permission.VIBRATE)
     override fun onChopChop() {
-        if (!chopEnabled) return      // still cooling down
+        val now = System.currentTimeMillis()
+        if (now - lastToggleTime < TOGGLE_COOLDOWN_MS) {
+            Log.d("ShakeService", "Toggle ignored - still in cooldown period")
+            return  // Still in cooldown, ignore this chop
+        }
+        lastToggleTime = now  // still cooling down
 
-        // Disable until timer expires
-        chopEnabled = false
 
-        fun getVibrationEffect(): VibrationEffect =
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                VibrationEffect.createOneShot(100, VibrationEffect.DEFAULT_AMPLITUDE)
+                val vibrationEffect =
+                    VibrationEffect.createOneShot(100, VibrationEffect.DEFAULT_AMPLITUDE)
+                vibrator.vibrate(vibrationEffect)
             } else {
                 @Suppress("DEPRECATION")
-                VibrationEffect.createWaveform(longArrayOf(0, 100), -1)
+                vibrator.vibrate(100)
             }
-
-        // Vibrate + toggle flashlight
-        vibrator.vibrate(getVibrationEffect())
-        flashlightController.toggleFlashlight()
 
         // Update notification, etc.
         //updateNotification()
 
         // Schedule re-enable after 1 second
-        Handler(Looper.getMainLooper()).postDelayed({
-            chopEnabled = true
-        }, 1000)
+
 
         // Toggle flashlight
         Log.i("ShakeService", "SERVICE onChopChop RECEIVED!")
